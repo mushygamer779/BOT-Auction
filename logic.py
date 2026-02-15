@@ -4,7 +4,6 @@ from config import DATABASE
 import os
 import cv2
 
-
 class DatabaseManager:
     def __init__(self, database):
         self.database = database
@@ -74,29 +73,64 @@ class DatabaseManager:
 
     def get_users(self):
         conn = sqlite3.connect(self.database)
-        cur = conn.cursor()
-        cur.execute("SELECT user_id FROM users")
-        return [x[0] for x in cur.fetchall()] 
-        
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM users')
+            return [x[0] for x in cur.fetchall()] 
+            
+    def get_random_prize(self):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM prizes WHERE used = 0 ORDER BY RANDOM()')
+            return cur.fetchall()[0]
         
     def get_prize_img(self, prize_id):
         conn = sqlite3.connect(self.database)
-        cur = conn.cursor()
-        cur.execute("SELECT image FROM prizes WHERE prize_id = ?", (prize_id,))
-        result = cur.fetchall()
-        if result:
-            return result[0][0]
-        return None
-    
-    def get_random_prize(self):
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT image FROM prizes WHERE prize_id = ?', (prize_id, ))
+            return cur.fetchall()[0][0]
+        
+    def get_winners_count(self, prize_id):
         conn = sqlite3.connect(self.database)
-        cur = conn.cursor()
-        cur.execute("SELECT prize_id, image FROM prizes WHERE used = 0 ORDER BY RANDOM() LIMIT 1")
-        result = cur.fetchall()
-        if result:
-            return result[0]
-        return None
-  
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT COUNT(*) FROM winners WHERE prize_id = ?', (prize_id, ))
+            return cur.fetchall()[0][0]
+    
+    def get_winners_img(self, user_id):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cur = conn.cursor()
+            cur.execute(''' 
+                SELECT image FROM winners 
+                INNER JOIN prizes ON 
+                winners.prize_id = prizes.prize_id
+                WHERE user_id = ?''', (user_id, ))
+            return cur.fetchall()
+        
+    def get_rating(self):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cur = conn.cursor()
+            cur.execute('''
+                    SELECT users.user_name, COUNT(winners.prize_id) as count_prize FROM winners
+                    INNER JOIN users on users.user_id = winners.user_id
+                    GROUP BY winners.user_id
+                    ORDER BY count_prize
+                    LIMIT 10''')
+            return cur.fetchall()
+        
+    def remove_all_elemetns(self):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            #conn.execute('DELETE FROM users')
+            conn.execute('DELETE FROM prizes')
+            #conn.execute('DELETE FROM winners')
+            conn.commit() 
+
+
 def hide_img(img_name):
     image = cv2.imread(f'img/{img_name}')
     blurred_image = cv2.GaussianBlur(image, (15, 15), 0)
@@ -104,9 +138,16 @@ def hide_img(img_name):
     pixelated_image = cv2.resize(pixelated_image, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
     cv2.imwrite(f'hidden_img/{img_name}', pixelated_image)
 
+
+
+
+   
+
 if __name__ == '__main__':
     manager = DatabaseManager(DATABASE)
-    manager.create_tables()
-    prizes_img = os.listdir('img')
-    data = [(x,) for x in prizes_img]
-    manager.add_prize(data)
+    #manager.remove_all_elemetns()
+    #manager.create_tables()
+    #prizes_img = os.listdir('img')
+    #data = [(x,) for x in prizes_img]
+    #manager.add_prize(data)
+    manager.get_winners_count()
