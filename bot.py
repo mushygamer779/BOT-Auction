@@ -18,11 +18,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _last_prize_id = None
 _last_img = None
 
+points = 0 
+
 def gen_markup(id):
     markup = InlineKeyboardMarkup()
     markup.row_width = 1
     markup.add(InlineKeyboardButton("Получить!", callback_data=str(id)))
     return markup
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
@@ -37,6 +40,7 @@ def callback_query(call):
             photo_path = os.path.join(BASE_DIR, 'img', img)
             with open(photo_path, 'rb') as photo:
                 bot.send_photo(user_id, photo, caption="Поздравляем! Ты получил картинку!")
+                manager.increment_points(user_id)  # Увеличиваем очки пользователя
         else:
             bot.send_message(user_id, 'Ты уже получил картинку!')
     else:
@@ -99,35 +103,46 @@ def handle_start(message):
 
 @bot.message_handler(commands=['rating'])
 def handle_rating(message):
-    res = manager.get_rating()
-    w1, w2 = 14, 12
-    sep = '| ' + '—' * w1 + ' | ' + '—' * w2 + ' |'
-    lines = [
-        f'| {"USER_NAME":<{w1}} | {"COUNT_PRIZE":<{w2}} |',
-        sep,
-    ]
-    for x in res:
-        name = f'@{x[0]}' if x[0] else '(no name)'
-        lines.append(f'| {name:<{w1}} | {x[1]:<{w2}} |')
-    bot.send_message(message.chat.id, '<pre>' + '\n'.join(lines) + '</pre>', parse_mode='HTML')
+    manager = DatabaseManager(DATABASE)
+    if manager.get_points(message.from_user.id) < 3:
+        bot.send_message(message.chat.id, "У тебя нет очков! Получи хотя бы 3 очка, чтобы увидеть рейтинг!")
+        return
+    else:
+        res = manager.get_rating()
+        w1, w2 = 14, 12
+        sep = '| ' + '—' * w1 + ' | ' + '—' * w2 + ' |'
+        lines = [
+            f'| {"USER_NAME":<{w1}} | {"COUNT_PRIZE":<{w2}} |',
+            sep,
+        ]
+        for x in res:
+            name = f'@{x[0]}' if x[0] else '(no name)'
+            lines.append(f'| {name:<{w1}} | {x[1]:<{w2}} |')
+        bot.send_message(message.chat.id, '<pre>' + '\n'.join(lines) + '</pre>', parse_mode='HTML')
+        manager.Decrease_points(message.from_user.id, 3)  # Уменьшаем очки пользователя на 3 после просмотра рейтинга
 
 
 @bot.message_handler(commands=['get_my_score'])
 def handle_get_my_score(message):
     m = DatabaseManager(DATABASE)
-    info = m.get_winners_img(message.from_user.id)
-    prizes = [x[0] for x in info]
-    image_paths = os.listdir('img')
-    image_paths = [f'img/{x}' if x in prizes else f'hidden_img/{x}' for x in image_paths]
-    collage = m.create_collage(image_paths)
-
-    if collage is not None:
-        cv2.imwrite('collage.jpg', collage)
-        with open('collage.jpg', 'rb') as photo:
-            bot.send_photo(message.chat.id, photo)
-        os.remove('collage.jpg')
+    if manager.get_points(message.from_user.id) < 5:
+        bot.send_message(message.chat.id, "У тебя нет очков! Получи хотя бы 5 очков, чтобы увидеть свои призы!")
+        return
     else:
-        bot.send_message(message.chat.id, "Ошибка при создании коллажа.")
+        info = m.get_winners_img(message.from_user.id)
+        prizes = [x[0] for x in info]
+        image_paths = os.listdir('img')
+        image_paths = [f'img/{x}' if x in prizes else f'hidden_img/{x}' for x in image_paths]
+        collage = m.create_collage(image_paths)
+
+        if collage is not None:
+            cv2.imwrite('collage.jpg', collage)
+            with open('collage.jpg', 'rb') as photo:
+                bot.send_photo(message.chat.id, photo)
+            os.remove('collage.jpg')
+        else:
+            bot.send_message(message.chat.id, "Ошибка при создании коллажа.")
+        m.Decrease_points(message.from_user.id, 5)  # Уменьшаем очки пользователя на 5 после просмотра своих призов
 
 def polling_thread():
     bot.polling(none_stop=True)
