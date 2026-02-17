@@ -161,6 +161,34 @@ LIMIT 10''')
 
 #----------------------------------------------------------------------
 
+    def add_column(self, table_name, column_name, column_type):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            conn.execute(f'ALTER TABLE IF EXISTS {table_name} ADD COLUMN {column_name} {column_type}')
+            conn.commit()
+
+    def increment_points(self, user_id):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            conn.execute('''UPDATE users SET points = points + 1 WHERE user_id = ?''', (user_id,))
+            conn.commit()
+
+    def get_points(self, user_id):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT points FROM users WHERE user_id = ?', (user_id,))
+            result = cur.fetchall()
+            return result[0][0] if result else 0
+
+    def Decrease_points(self, user_id, amount):
+        conn = sqlite3.connect(self.database)
+        with conn:
+            conn.execute('''UPDATE users SET points = points - ? WHERE user_id = ?''', (amount, user_id))
+            conn.commit()
+
+
+
 def hide_img(img_name):
     image = cv2.imread(f'img/{img_name}')
     blurred_image = cv2.GaussianBlur(image, (15, 15), 0)
@@ -174,3 +202,4 @@ if __name__ == '__main__':
     prizes_img = os.listdir('img')
     data = [(x,) for x in prizes_img]
     manager.add_prize(data)
+   # manager.add_column('users', 'points', 'INTEGER DEFAULT 0')
