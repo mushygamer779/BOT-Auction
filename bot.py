@@ -6,6 +6,10 @@ import schedule
 import threading
 import time
 from config import *
+import cv2
+import numpy as np
+from math import sqrt, ceil, floor
+
 
 bot = TeleBot(API_TOKEN)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -92,6 +96,7 @@ def handle_start(message):
                 # Картинки уже раздали на аукционе
                 bot.send_message(user_id, "Картинки уже раздали на аукционе! Жди следующую рассылку!")
 
+
 @bot.message_handler(commands=['rating'])
 def handle_rating(message):
     res = manager.get_rating()
@@ -106,6 +111,23 @@ def handle_rating(message):
         lines.append(f'| {name:<{w1}} | {x[1]:<{w2}} |')
     bot.send_message(message.chat.id, '<pre>' + '\n'.join(lines) + '</pre>', parse_mode='HTML')
 
+
+@bot.message_handler(commands=['get_my_score'])
+def handle_get_my_score(message):
+    m = DatabaseManager(DATABASE)
+    info = m.get_winners_img(message.from_user.id)
+    prizes = [x[0] for x in info]
+    image_paths = os.listdir('img')
+    image_paths = [f'img/{x}' if x in prizes else f'hidden_img/{x}' for x in image_paths]
+    collage = m.create_collage(image_paths)
+
+    if collage is not None:
+        cv2.imwrite('collage.jpg', collage)
+        with open('collage.jpg', 'rb') as photo:
+            bot.send_photo(message.chat.id, photo)
+        os.remove('collage.jpg')
+    else:
+        bot.send_message(message.chat.id, "Ошибка при создании коллажа.")
 
 def polling_thread():
     bot.polling(none_stop=True)
